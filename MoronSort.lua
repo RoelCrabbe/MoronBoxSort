@@ -424,3 +424,21 @@ function ms_containerClass(container)
 		end
 	end
 end
+
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+
+SLASH_MORONSORT1 = "/ms"
+SLASH_MORONSORT2 = "/msort"
+
+SlashCmdList["MORONSORT"] = function()	
+	ms_sortBags()
+end
+
+SLASH_MORONBANKSORT1 = "/mbs"
+SLASH_MORONBANKSORT2 = "/mbsort"
+
+SlashCmdList["MORONBANKSORT"] = function()	
+	ms_sortBankBags()
+end
