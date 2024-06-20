@@ -12,11 +12,12 @@ MoronSortUpdate:Hide()
 ----------------------------------------------- Locals! ----------------------------------------------
 ------------------------------------------------------------------------------------------------------
 
-local BagNumbers
+local CONTAINERS
 local model, itemStacks, itemClasses, itemSortKeys
 
 local timeOut
 local timeDelay = 0
+local counts
 
 local _, _, _, hasMoronBoxCore, _, _, _ = GetAddOnInfo("MoronBoxCore")
 
@@ -40,11 +41,11 @@ function MoronSortEvent:OnEvent()
 
 		if hasMoronBoxCore and MB_sortingBags.Active then
 
-			mb_sortBags()
+			ms_sortBags()
 
 			if MB_sortingBags.Bank then
 			
-				mb_sortBankBags()
+				ms_sortBankBags()
 			end
 		end
 	end
@@ -58,89 +59,119 @@ function MoronSortUpdate:OnUpdate()
 	if timeDelay <= 0 then
 		timeDelay = 0.2
 
-		local finishedSort = Sort()
+		local finishedSort = ms_sort()
 
 		if finishedSort or GetTime() > timeOut then
 			MoronSortUpdate:Hide()
 			return
 		end
 
-		Stack()
+		ms_stack()
 	end
 end
 
 MoronSortUpdate:SetScript("OnUpdate", MoronSortUpdate.OnUpdate)
 
 ------------------------------------------------------------------------------------------------------
---------------------------------------- Raid Assistance Tools! ---------------------------------------
+------------------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------------------
 
-function mb_sortBags()
-	BagNumbers = {0, 1, 2, 3, 4}
-	Start()
+function ms_sortBags()
+	CONTAINERS = {0, 1, 2, 3, 4}
+	ms_startPacking()
 end
 
-function mb_sortBankBags()
-	BagNumbers = {-1, 5, 6, 7, 8, 9, 10}
-	Start()
+function ms_sortBankBags()
+	CONTAINERS = {-1, 5, 6, 7, 8, 9, 10}
+	ms_startPacking()
 end
 
-function Start()
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+
+function ms_startPacking()
 	if MoronSortUpdate:IsShown() then return end
-	Initialize()
+
+	model, counts, itemStacks, itemClasses, itemSortKeys = {}, {}, {}, {}, {}
 	timeOut = GetTime() + 7
 	MoronSortUpdate:Show()
-end
 
-do
-	local function key(table, value)
-		for k, v in table do
-			if v == value then
-				return k
+	for _, container in CONTAINERS do
+		local class = ms_containerClass(container)
+		for position = 1, GetContainerNumSlots(container) do
+			local slot = {container=container, position=position, class=class}
+			local item = ms_Item(container, position)
+			if item then
+				local _, count = GetContainerItemInfo(container, position)
+				slot.item = item
+				slot.count = count
+				counts[item] = (counts[item] or 0) + count
+			end
+			tinsert(model, 1, slot)
+		end
+	end
+
+	local free = {}
+
+	for item, count in counts do
+		local stacks = ceil(count / itemStacks[item])
+		free[item] = stacks
+		if itemClasses[item] then
+			free[itemClasses[item]] = (free[itemClasses[item]] or 0) + stacks
+		end
+	end
+
+	for _, slot in model do
+		if slot.class and free[slot.class] then
+			free[slot.class] = free[slot.class] - 1
+		end
+	end
+
+	local items = {}
+
+	for item in counts do
+		tinsert(items, item)
+	end
+
+	sort(items, function(a, b) return LT(itemSortKeys[a], itemSortKeys[b]) end)
+
+	for _, slot in model do
+		if slot.class then
+			for _, item in items do
+				if itemClasses[item] == slot.class and ms_assign(slot, item) then
+					break
+				end
+			end
+		else
+			for _, item in items do
+				if (not itemClasses[item] or free[itemClasses[item]] > 0) and ms_assign(slot, item) then
+					if itemClasses[item] then
+						free[itemClasses[item]] = free[itemClasses[item]] - 1
+					end
+					break
+				end
 			end
 		end
 	end
-
-	function ItemTypeKey(itemClass)
-		return key(ITEM_TYPES, itemClass) or 0
-	end
-
-	function ItemSubTypeKey(itemClass, itemSubClass)
-		return key({GetAuctionItemSubClasses(ItemTypeKey(itemClass))}, itemClass) or 0
-	end
-
-	function ItemInvTypeKey(itemClass, itemSubClass, itemSlot)
-		return key({GetAuctionInvTypes(ItemTypeKey(itemClass), ItemSubTypeKey(itemSubClass))}, itemSlot) or 0
-	end
 end
 
-function LT(a, b)
-	local i = 1
-	while true do
-		if a[i] and b[i] and a[i] ~= b[i] then
-			return a[i] < b[i]
-		elseif not a[i] and b[i] then
-			return true
-		elseif not b[i] then
-			return false
-		end
-		i = i + 1
-	end
-end
-
-function Move(src, dst)
+function ms_move(src, dst)
     local texture, _, srcLocked = GetContainerItemInfo(src.container, src.position)
     local _, _, dstLocked = GetContainerItemInfo(dst.container, dst.position)
     
 	if texture and not srcLocked and not dstLocked then
+		
 		ClearCursor()
        	PickupContainerItem(src.container, src.position)
 		PickupContainerItem(dst.container, dst.position)
 
 		if src.item == dst.item then
+			
 			local count = min(src.count, itemStacks[dst.item] - dst.count)
 			src.count = src.count - count
 			dst.count = dst.count + count
+			
 			if src.count == 0 then
 				src.item = nil
 			end
@@ -148,51 +179,17 @@ function Move(src, dst)
 			src.item, dst.item = dst.item, src.item
 			src.count, dst.count = dst.count, src.count
 		end
-
 		return true
     end
 end
 
-function TooltipInfo(container, position)
-	local chargesPattern = '^' .. gsub(gsub(ITEM_SPELL_CHARGES_P1, '%%d', '(%%d+)'), '%%%d+%$d', '(%%d+)') .. '$'
-
-	MoronSortTooltip:SetOwner(UIParent, 'ANCHOR_NONE')
-	MoronSortTooltip:ClearLines()
-
-	if container == BANK_CONTAINER then
-		MoronSortTooltip:SetInventoryItem('player', BankButtonIDToInvSlotID(position))
-	else
-		MoronSortTooltip:SetBagItem(container, position)
-	end
-
-	local charges, usable, soulbound, quest, conjured
-	for i = 1, MoronSortTooltip:NumLines() do
-		local text = getglobal('MoronSortTooltipTextLeft' .. i):GetText()
-
-		local _, _, chargeString = strfind(text, chargesPattern)
-		if chargeString then
-			charges = tonumber(chargeString)
-		elseif strfind(text, '^' .. ITEM_SPELL_TRIGGER_ONUSE) then
-			usable = true
-		elseif text == ITEM_SOULBOUND then
-			soulbound = true
-		elseif text == ITEM_BIND_QUEST then
-			quest = true
-		elseif text == ITEM_CONJURED then
-			conjured = true
-		end
-	end
-
-	return charges or 1, usable, soulbound, quest, conjured
-end
-
-function Sort()
+function ms_sort()
 	local complete = true
 
 	for _, dst in model do
 		if dst.targetItem and (dst.item ~= dst.targetItem or dst.count < dst.targetCount) then
+			
 			complete = false
-
 			local sources, rank = {}, {}
 
 			for _, src in model do
@@ -209,129 +206,38 @@ function Sort()
 			sort(sources, function(a, b) return rank[a] < rank[b] end)
 
 			for _, src in sources do
-				if Move(src, dst) then
+				if ms_move(src, dst) then
 					break
 				end
 			end
 		end
 	end
-
 	return complete
 end
 
-function Stack()
+function ms_stack()
 	for _, src in model do
 		if src.item and src.count < itemStacks[src.item] and src.item ~= src.targetItem then
 			for _, dst in model do
 				if dst ~= src and dst.item and dst.item == src.item and dst.count < itemStacks[dst.item] and dst.item ~= dst.targetItem then
-					Move(src, dst)
+					ms_move(src, dst)
 				end
 			end
 		end
 	end
 end
 
-do
-	local counts
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
-	local function insert(t, v)
-		tinsert(t, 1, v)
-	end
-
-	local function assign(slot, item)
-		if counts[item] > 0 then
-			local count
-
-				count = min(counts[item], itemStacks[item])
-			
-			slot.targetItem = item
-			slot.targetCount = count
-			counts[item] = counts[item] - count
-			return true
-		end
-	end
-
-	function Initialize()
-		model, counts, itemStacks, itemClasses, itemSortKeys = {}, {}, {}, {}, {}
-
-		for _, container in BagNumbers do
-			local class = ContainerClass(container)
-			for position = 1, GetContainerNumSlots(container) do
-				local slot = {container=container, position=position, class=class}
-				local item = Item(container, position)
-				if item then
-					local _, count = GetContainerItemInfo(container, position)
-					slot.item = item
-					slot.count = count
-					counts[item] = (counts[item] or 0) + count
-				end
-				insert(model, slot)
-			end
-		end
-
-		local free = {}
-		for item, count in counts do
-			local stacks = ceil(count / itemStacks[item])
-			free[item] = stacks
-			if itemClasses[item] then
-				free[itemClasses[item]] = (free[itemClasses[item]] or 0) + stacks
-			end
-		end
-		for _, slot in model do
-			if slot.class and free[slot.class] then
-				free[slot.class] = free[slot.class] - 1
-			end
-		end
-
-		local items = {}
-		for item in counts do
-			tinsert(items, item)
-		end
-		sort(items, function(a, b) return LT(itemSortKeys[a], itemSortKeys[b]) end)
-
-		for _, slot in model do
-			if slot.class then
-				for _, item in items do
-					if itemClasses[item] == slot.class and assign(slot, item) then
-						break
-					end
-				end
-			else
-				for _, item in items do
-					if (not itemClasses[item] or free[itemClasses[item]] > 0) and assign(slot, item) then
-						if itemClasses[item] then
-							free[itemClasses[item]] = free[itemClasses[item]] - 1
-						end
-						break
-					end
-				end
-			end
-		end
-	end
-end
-
-function ContainerClass(container)
-	if container ~= 0 and container ~= BANK_CONTAINER then
-		local name = GetBagName(container)
-		if name then		
-			for class, info in CLASSES do
-				for _, itemID in info.BagNumbers do
-					if name == GetItemInfo(itemID) then
-						return class
-					end
-				end	
-			end
-		end
-	end
-end
-
-function Item(container, position)
+function ms_Item(container, position)
 	local link = GetContainerItemLink(container, position)
 	if link then
 		local _, _, itemID, enchantID, suffixID, uniqueID = strfind(link, 'item:(%d+):(%d*):(%d*):(%d*)')
 		itemID = tonumber(itemID)
 		local _, _, quality, _, type, subType, stack, invType = GetItemInfo(itemID)
-		local charges, usable, soulbound, quest, conjured = TooltipInfo(container, position)
+		local charges, usable, soulbound, quest, conjured = ms_tooltipInfo(container, position)
 
 		local sortKey = {}
 
@@ -403,9 +309,9 @@ function Item(container, position)
 			tinsert(sortKey, 20)
 		end
 		
-		tinsert(sortKey, ItemTypeKey(type))
-		tinsert(sortKey, ItemInvTypeKey(type, subType, invType))
-		tinsert(sortKey, ItemSubTypeKey(type, subType))
+		tinsert(sortKey, ms_ItemTypeKey(type))
+		tinsert(sortKey, ms_ItemInvTypeKey(type, subType, invType))
+		tinsert(sortKey, ms_ItemSubTypeKey(type, subType))
 		tinsert(sortKey, -quality)
 		tinsert(sortKey, itemID)
 		tinsert(sortKey, suffixID)
@@ -423,7 +329,98 @@ function Item(container, position)
 				break
 			end
 		end
-
 		return key
+	end
+end
+
+function ms_tooltipInfo(container, position)
+	local chargesPattern = '^' .. gsub(gsub(ITEM_SPELL_CHARGES_P1, '%%d', '(%%d+)'), '%%%d+%$d', '(%%d+)') .. '$'
+
+	MoronSortTooltip:SetOwner(UIParent, 'ANCHOR_NONE')
+	MoronSortTooltip:ClearLines()
+
+	if container == BANK_CONTAINER then
+		MoronSortTooltip:SetInventoryItem('player', BankButtonIDToInvSlotID(position))
+	else
+		MoronSortTooltip:SetBagItem(container, position)
+	end
+
+	local charges, usable, soulbound, quest, conjured
+	for i = 1, MoronSortTooltip:NumLines() do
+		local text = getglobal('MoronSortTooltipTextLeft' .. i):GetText()
+
+		local _, _, chargeString = strfind(text, chargesPattern)
+		if chargeString then
+			charges = tonumber(chargeString)
+		elseif strfind(text, '^' .. ITEM_SPELL_TRIGGER_ONUSE) then
+			usable = true
+		elseif text == ITEM_SOULBOUND then
+			soulbound = true
+		elseif text == ITEM_BIND_QUEST then
+			quest = true
+		elseif text == ITEM_CONJURED then
+			conjured = true
+		end
+	end
+	return charges or 1, usable, soulbound, quest, conjured
+end
+
+function ms_key(table, value)
+	for k, v in table do
+		if v == value then
+			return k
+		end
+	end
+end
+
+function ms_ItemTypeKey(itemClass)
+	return ms_key(ITEM_TYPES, itemClass) or 0
+end
+
+function ms_ItemSubTypeKey(itemClass, itemSubClass)
+	return ms_key({GetAuctionItemSubClasses(ms_ItemTypeKey(itemClass))}, itemClass) or 0
+end
+
+function ms_ItemInvTypeKey(itemClass, itemSubClass, itemSlot)
+	return ms_key({GetAuctionInvTypes(ms_ItemTypeKey(itemClass), ms_ItemSubTypeKey(itemSubClass))}, itemSlot) or 0
+end
+
+function LT(a, b)
+	local i = 1
+	while true do
+		if a[i] and b[i] and a[i] ~= b[i] then
+			return a[i] < b[i]
+		elseif not a[i] and b[i] then
+			return true
+		elseif not b[i] then
+			return false
+		end
+		i = i + 1
+	end
+end
+
+function ms_assign(slot, item)
+	if counts[item] > 0 then
+		local count
+		count = min(counts[item], itemStacks[item])
+		slot.targetItem = item
+		slot.targetCount = count
+		counts[item] = counts[item] - count
+		return true
+	end
+end
+
+function ms_containerClass(container)
+	if container ~= 0 and container ~= BANK_CONTAINER then
+		local name = GetBagName(container)
+		if name then		
+			for class, info in CLASSES do
+				for _, itemID in info.containers do
+					if name == GetItemInfo(itemID) then
+						return class
+					end
+				end	
+			end
+		end
 	end
 end
