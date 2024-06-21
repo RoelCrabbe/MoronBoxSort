@@ -1,6 +1,7 @@
 # MoronSort
 
-Slashcommands :
+Based on https://github.com/shirsig/SortBags-vanilla by shirsig.
+Slash Commands :
 
     -- Sorting Normal Bags
       /ms
