@@ -1,4 +1,4 @@
-# MoronSort
+# MoronBoxSort
 
 Based on https://github.com/shirsig/SortBags-vanilla by shirsig.
 ## Slash Commands :

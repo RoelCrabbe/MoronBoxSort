@@ -1,0 +1,6 @@
+## Interface: 11200
+## Title: MoronBoxSort by |cff00ccffMoRoN|r
+## Author: MoRoN
+## Notes: |cff00ccffMoronBoxSort|r is a lightweight bag sorting addon, optimized for Multiboxing.
+
+MoronBoxSort.lua
