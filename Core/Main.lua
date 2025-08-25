@@ -19,7 +19,7 @@ local CONTAINERS
 local model, itemStacks, itemClasses, itemSortKeys
 
 local timeOut
-local timeDelay = 0
+local timeDelay = 0.25
 local counts
 
 local _, _, _, hasMoronBoxCore, _, _, _ = GetAddOnInfo("MoronBoxCore")
@@ -39,15 +39,11 @@ do
 end
 
 function MoronSortEvent:OnEvent()
-
 	if (event == "MERCHANT_SHOW" or event == "BANKFRAME_OPENED") then
-
 		if hasMoronBoxCore and MB_sortingBags.Active then
-
 			SortBags()
 
-			if MB_sortingBags.Bank then
-			
+			if MB_sortingBags.Bank then			
 				SortBankBags()
 			end
 		end
@@ -60,10 +56,9 @@ function MoronSortUpdate:OnUpdate()
 	timeDelay = timeDelay - arg1
 
 	if timeDelay <= 0 then
-		timeDelay = 0.2
+		timeDelay = 0.5
 
 		local finishedSort = SortBag()
-
 		if finishedSort or GetTime() > timeOut then
 			MoronSortUpdate:Hide()
 			return
