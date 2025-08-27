@@ -239,6 +239,10 @@ function BagItem(container, position)
 
 		local sortKey = {}
 
+		if itemID == 15723 then
+			stack = 20
+		end
+
 		-- hearthstone
 		if itemID == 6948 then
 			tinsert(sortKey, 1)
