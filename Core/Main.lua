@@ -19,7 +19,7 @@ local CONTAINERS
 local model, itemStacks, itemClasses, itemSortKeys
 
 local timeOut
-local timeDelay = 0.25
+local timeDelay = 0.125
 local counts
 
 local _, _, _, hasMoronBoxCore, _, _, _ = GetAddOnInfo("MoronBoxCore")
@@ -56,7 +56,7 @@ function MoronSortUpdate:OnUpdate()
 	timeDelay = timeDelay - arg1
 
 	if timeDelay <= 0 then
-		timeDelay = 0.5
+		timeDelay = 0.25
 
 		local finishedSort = SortBag()
 		if finishedSort or GetTime() > timeOut then
@@ -241,6 +241,10 @@ function BagItem(container, position)
 
 		if itemID == 15723 then
 			stack = 20
+		end
+
+		if itemID == 8529 then
+			stack = 200
 		end
 
 		-- hearthstone
